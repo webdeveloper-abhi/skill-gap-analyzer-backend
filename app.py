@@ -4,12 +4,12 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from transformers import pipeline
 import pandas as pd
 import fitz
 from docx import Document
 import tempfile
 import re
+import requests
 
 app = Flask(__name__)
 CORS(app)
@@ -17,48 +17,21 @@ CORS(app)
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-ner = None
-sentiment = None
+HF_TOKEN = os.getenv("HF_TOKEN")
+
+HEADERS = {
+    "Authorization": f"Bearer {HF_TOKEN}"
+}
+
+NER_API = "https://api-inference.huggingface.co/models/dslim/bert-base-NER"
+
+SENTIMENT_API = "https://api-inference.huggingface.co/models/distilbert-base-uncased-finetuned-sst-2-english"
 
 skill_df = pd.read_csv("skill_master.csv")
 
 TECH_SKILLS = sorted(
     set(skill_df["Skill"].dropna().astype(str).tolist())
 )
-
-TECH_SKILLS_LOWER = [
-    skill.lower() for skill in TECH_SKILLS
-]
-
-
-def load_models():
-
-    global ner, sentiment
-
-    if ner is None:
-
-        print("Loading NER model...")
-
-        ner = pipeline(
-            "token-classification",
-            model="dslim/bert-base-NER",
-            aggregation_strategy="simple",
-            device=-1
-        )
-
-        print("NER model loaded!")
-
-    if sentiment is None:
-
-        print("Loading sentiment model...")
-
-        sentiment = pipeline(
-            "sentiment-analysis",
-            model="distilbert-base-uncased-finetuned-sst-2-english",
-            device=-1
-        )
-
-        print("Sentiment model loaded!")
 
 
 def extract_text_from_pdf(path):
@@ -82,6 +55,38 @@ def extract_text_from_docx(path):
     )
 
 
+def ner_request(text):
+
+    payload = {
+        "inputs": text[:700]
+    }
+
+    response = requests.post(
+        NER_API,
+        headers=HEADERS,
+        json=payload,
+        timeout=60
+    )
+
+    return response.json()
+
+
+def sentiment_request(text):
+
+    payload = {
+        "inputs": text
+    }
+
+    response = requests.post(
+        SENTIMENT_API,
+        headers=HEADERS,
+        json=payload,
+        timeout=60
+    )
+
+    return response.json()
+
+
 def extract_skills(text):
 
     found_skills = set()
@@ -97,16 +102,18 @@ def extract_skills(text):
 
     try:
 
-        entities = ner(text[:700])
+        entities = ner_request(text)
 
-        for entity in entities:
+        if isinstance(entities, list):
 
-            word = entity["word"]
+            for entity in entities:
 
-            for skill in TECH_SKILLS:
+                word = entity.get("word", "")
 
-                if word.lower() == skill.lower():
-                    found_skills.add(skill)
+                for skill in TECH_SKILLS:
+
+                    if word.lower() == skill.lower():
+                        found_skills.add(skill)
 
     except Exception as e:
 
@@ -135,31 +142,30 @@ def analyze_skill_strength(text, skills):
 
         sentence = find_best_sentence(text, skill)
 
+        strength = "MODERATE"
+
         if sentence:
 
             try:
 
-                analysis = sentiment(sentence)[0]
+                analysis = sentiment_request(sentence)
 
-                score = analysis["score"]
+                if isinstance(analysis, list):
 
-                if score > 0.7:
-                    strength = "STRONG"
+                    score = analysis[0]["score"]
 
-                elif score > 0.4:
-                    strength = "MODERATE"
+                    if score > 0.7:
+                        strength = "STRONG"
 
-                else:
-                    strength = "WEAK"
+                    elif score > 0.4:
+                        strength = "MODERATE"
+
+                    else:
+                        strength = "WEAK"
 
             except Exception as e:
 
                 print("Sentiment Error:", e)
-
-                strength = "MODERATE"
-
-        else:
-            strength = "WEAK"
 
         results.append({
             "skill": skill,
@@ -187,8 +193,6 @@ def health():
 
 @app.route("/analyze_file", methods=["POST"])
 def analyze_file():
-
-    load_models()
 
     if "file" not in request.files:
 
