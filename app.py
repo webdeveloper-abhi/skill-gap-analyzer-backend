@@ -23,7 +23,7 @@ ner = pipeline(
     "token-classification",
     model="dslim/bert-base-NER",
     aggregation_strategy="simple",
-    device=device
+    device=-1
 )
 
 sentiment = pipeline(
@@ -179,4 +179,5 @@ def analyze_file():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
