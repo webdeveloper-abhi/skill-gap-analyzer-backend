@@ -1,0 +1,10 @@
+flask
+flask-cors
+transformers
+torch
+pandas
+PyMuPDF
+python-docx
+gunicorn
+sentencepiece
+protobuf
