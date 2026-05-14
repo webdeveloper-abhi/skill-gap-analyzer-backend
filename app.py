@@ -10,6 +10,9 @@ from docx import Document
 import tempfile
 import re
 import requests
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
@@ -27,10 +30,14 @@ NER_API = "https://api-inference.huggingface.co/models/dslim/bert-base-NER"
 
 SENTIMENT_API = "https://api-inference.huggingface.co/models/distilbert-base-uncased-finetuned-sst-2-english"
 
-skill_df = pd.read_csv("skill_master.csv")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+CSV_PATH = os.path.join(BASE_DIR, "skill_master.csv")
+
+skill_df = pd.read_csv(CSV_PATH)
 
 TECH_SKILLS = sorted(
-    set(skill_df["Skill"].dropna().astype(str).tolist())
+    set(skill_df["skill"].dropna().astype(str).tolist())
 )
 
 
@@ -179,7 +186,7 @@ def analyze_skill_strength(text, skills):
 def home():
 
     return jsonify({
-        "message": "Skill Gap Analyzer API Running"
+        "message": "Skill Gap Analyzer API Running Successfully"
     })
 
 
@@ -194,34 +201,34 @@ def health():
 @app.route("/analyze_file", methods=["POST"])
 def analyze_file():
 
-    if "file" not in request.files:
-
-        return jsonify({
-            "success": False,
-            "error": "No file uploaded"
-        }), 400
-
-    file = request.files["file"]
-
-    if file.filename == "":
-
-        return jsonify({
-            "success": False,
-            "error": "Empty file"
-        }), 400
-
-    suffix = os.path.splitext(file.filename)[1]
-
-    with tempfile.NamedTemporaryFile(
-        delete=False,
-        suffix=suffix
-    ) as temp_file:
-
-        file.save(temp_file.name)
-
-        file_path = temp_file.name
-
     try:
+
+        if "file" not in request.files:
+
+            return jsonify({
+                "success": False,
+                "error": "No file uploaded"
+            }), 400
+
+        file = request.files["file"]
+
+        if file.filename == "":
+
+            return jsonify({
+                "success": False,
+                "error": "Empty file"
+            }), 400
+
+        suffix = os.path.splitext(file.filename)[1]
+
+        with tempfile.NamedTemporaryFile(
+            delete=False,
+            suffix=suffix
+        ) as temp_file:
+
+            file.save(temp_file.name)
+
+            file_path = temp_file.name
 
         if suffix.lower() == ".pdf":
 
@@ -256,8 +263,14 @@ def analyze_file():
 
     finally:
 
-        if os.path.exists(file_path):
-            os.remove(file_path)
+        try:
+
+            if 'file_path' in locals() and os.path.exists(file_path):
+                os.remove(file_path)
+
+        except Exception as e:
+
+            print("Cleanup Error:", e)
 
 
 if __name__ == "__main__":
