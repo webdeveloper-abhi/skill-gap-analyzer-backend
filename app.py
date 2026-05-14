@@ -35,6 +35,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CSV_PATH = os.path.join(BASE_DIR, "skill_master.csv")
 
 try:
+
     skill_df = pd.read_csv(CSV_PATH)
 
     print("CSV Loaded Successfully")
@@ -258,9 +259,20 @@ def analyze_file():
 
         analysis = analyze_skill_strength(text, skills)
 
+        skills_only = []
+
+        strengths = {}
+
+        for item in analysis:
+
+            skills_only.append(item["skill"])
+
+            strengths[item["skill"]] = item["strength"]
+
         return jsonify({
             "success": True,
-            "skills": analysis
+            "skills": skills_only,
+            "strengths": strengths
         })
 
     except Exception as e:
